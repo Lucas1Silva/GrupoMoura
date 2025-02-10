@@ -1,6 +1,8 @@
-# app/main.py
+import os
 from fastapi import FastAPI
 from dotenv import load_dotenv
+
+# Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
 
 from app.database import engine, Base
@@ -8,24 +10,20 @@ from app.routers import auth, tasks
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from slowapi.errors import RateLimitExceeded
 from fastapi.responses import JSONResponse
 from app.logger import logger
 
-# Cria as tabelas do banco de dados, se não existirem
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="Task Management API",
-    description="API para gerenciar tarefas com autenticação JWT"
+    description="API para gerenciar tarefas com autenticação JWT (Async)"
 )
 
 # Configuração de CORS
 origins = [
     "http://localhost",
     "http://localhost:8000",
-    # Adicione outros origins conforme necessário
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -47,8 +45,13 @@ async def rate_limit_handler(request, exc):
         content={"detail": "Limite de requisições excedido. Tente novamente mais tarde."}
     )
 
-# Inclusão dos roteadores
+# Evento de startup assíncrono para criar as tabelas no banco de dados
+@app.on_event("startup")
+async def on_startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Application startup complete.")
+
+# Inclusão dos routers
 app.include_router(auth.router)
 app.include_router(tasks.router)
-
-logger.info("Application startup complete.")

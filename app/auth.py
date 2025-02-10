@@ -1,22 +1,24 @@
-# app/auth.py
 import os
 from datetime import datetime, timedelta
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import models, schemas, database
+from . import models, schemas
+from .database import get_db
 
-# Carrega as variáveis de ambiente (assegure-se de que o arquivo .env foi carregado, via database.py ou main.py)
+# Carrega variáveis de ambiente
 SECRET_KEY = os.getenv("SECRET_KEY", "secret")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
+
+# Substituímos OAuth2PasswordBearer por HTTPBearer
+bearer_scheme = HTTPBearer()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -34,22 +36,25 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def get_user(db: Session, username: str):
-    return db.query(models.User).filter(models.User.username == username).first()
+async def get_user(db: AsyncSession, username: str):
+    from sqlalchemy.future import select
+    result = await db.execute(select(models.User).filter(models.User.username == username))
+    return result.scalars().first()
 
-def authenticate_user(db: Session, username: str, password: str):
-    """
-    Verifica se o usuário existe e se a senha está correta.
-    Retorna o objeto usuário se a autenticação for bem-sucedida ou False caso contrário.
-    """
-    user = get_user(db, username)
+async def authenticate_user(db: AsyncSession, username: str, password: str):
+    user = await get_user(db, username)
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
         return False
     return user
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)):
+# Modificado para usar HTTPBearer
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db)
+):
+    token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -63,7 +68,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         token_data = schemas.TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = get_user(db, username=token_data.username)
+    user = await get_user(db, username=token_data.username)
     if user is None:
         raise credentials_exception
     return user

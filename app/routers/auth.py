@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
-from app import schemas, database, auth
-from app.services import user_service
+
+from .. import schemas, database, auth
+from ..services import user_service
 
 router = APIRouter(
     prefix="/api",
@@ -11,15 +12,15 @@ router = APIRouter(
 )
 
 @router.post("/register", response_model=schemas.User)
-def register(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
-    new_user = user_service.create_user(db, user.username, user.password)
+async def register(user: schemas.UserCreate, db: AsyncSession = Depends(database.get_db)):
+    new_user = await user_service.create_user(db, user.username, user.password)
     if new_user is None:
         raise HTTPException(status_code=400, detail="Username already registered")
     return new_user
 
 @router.post("/login", response_model=schemas.Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
-    user = auth.authenticate_user(db, form_data.username, form_data.password)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(database.get_db)):
+    user = await auth.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
