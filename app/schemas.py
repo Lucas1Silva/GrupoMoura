@@ -1,47 +1,48 @@
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from enum import Enum
 
-# Schemas para usuários
-class UserCreate(BaseModel):
-    username: str
-    password: str
+class TaskStatus(str, Enum):
+    pending = "pending"
+    completed = "completed"
 
-class UserOut(BaseModel):
-    id: int
-    username: str
-    created_at: datetime
-
-    class Config:
-        orm_mode = True
-
-# Schemas para token (JWT)
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TokenData(BaseModel):
-    username: Optional[str] = None
-
-# Schemas para tarefas
 class TaskBase(BaseModel):
-    title: str
-    description: Optional[str] = None
+    title: str = Field(..., example="Comprar leite", description="Título da tarefa")
+    description: Optional[str] = Field(None, example="Comprar leite integral no supermercado", description="Descrição da tarefa")
 
 class TaskCreate(TaskBase):
     pass
 
 class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[str] = None  # "pending" ou "completed"
+    title: Optional[str] = Field(None, example="Comprar leite atualizado", description="Novo título da tarefa")
+    description: Optional[str] = Field(None, example="Atualizar descrição", description="Nova descrição da tarefa")
+    status: Optional[TaskStatus] = Field(None, example="completed", description="Status da tarefa")
 
-class TaskOut(TaskBase):
+class Task(TaskBase):
     id: int
     created_at: datetime
     completed_at: Optional[datetime] = None
-    status: str
-    owner_id: int
+    status: TaskStatus
+
+    class Config:
+        orm_mode = True  # Ou, se preferir, 'from_attributes = True' para Pydantic V2
+
+class UserBase(BaseModel):
+    username: str = Field(..., example="usuario_teste", description="Nome de usuário")
+
+class UserCreate(UserBase):
+    password: str = Field(..., example="StrongP@ssw0rd!", description="Senha do usuário")
+
+class User(UserBase):
+    id: int
 
     class Config:
         orm_mode = True
+
+class Token(BaseModel):
+    access_token: str = Field(..., example="jwt_token_string")
+    token_type: str = Field(..., example="bearer")
+
+class TokenData(BaseModel):
+    username: Optional[str] = None

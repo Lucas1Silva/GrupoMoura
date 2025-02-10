@@ -6,3 +6,6 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-dotenv
 python-multipart
+slowapi
+pytest
+httpx
